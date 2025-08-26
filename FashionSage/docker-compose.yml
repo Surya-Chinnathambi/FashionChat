@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: fashion_user
+      POSTGRES_PASSWORD: fashion_pass
+      POSTGRES_DB: fashion_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fashion_user -d fashion_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chroma
+    ports:
+      - "8001:8000"          # Expose Chroma API on localhost:8001
+    volumes:
+      - chroma_data:/chroma
+    environment:
+      - CHROMA_DB_DIR=/chroma
+
+  backend:
+    build: .
+    container_name: backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://fashion_user:fashion_pass@postgres:5432/fashion_db
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-your_openrouter_api_key_here}
+      - JWT_SECRET_KEY=your_super_secret_jwt_key_change_in_production
+      - CHROMA_HOST=http://chroma:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+
+volumes:
+  postgres_data:
+  chroma_data:
