@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Postgres already running separately
+      - DATABASE_URL="postgresql+psycopg2://fashionsage_user:surya1234@localhost:5432/fashionsage" 
+# Database Configuration
+      # OpenRouter API key
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      
+      # JWT Secret
+      - JWT_SECRET_KEY=your_super_secret_jwt_key_change_in_production
+      
+      # Chroma running locally on 8005
+      - CHROMA_HOST=http://host.docker.internal:8005
+
+    volumes:
+      - ./data:/app/data
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

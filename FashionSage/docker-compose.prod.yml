@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fashion_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fashion_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-fashion_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fashion_user} -d ${POSTGRES_DB:-fashion_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-fashion_user}:${POSTGRES_PASSWORD:-fashion_pass}@postgres:5432/${POSTGRES_DB:-fashion_db}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - DEBUG=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "80:80"
+    environment:
+      - VITE_API_URL=http://localhost:${APP_PORT:-8000}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_prod_data:
